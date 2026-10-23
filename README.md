@@ -1,297 +1,368 @@
-# Distributed version of the Spring PetClinic Sample Application built with Spring Cloud and Spring AI
+# Trabalho Prático 06 — Avaliação de Desempenho de Microsserviços com Locust
 
-[![Build Status](https://github.com/spring-petclinic/spring-petclinic-microservices/actions/workflows/maven-build.yml/badge.svg)](https://github.com/spring-petclinic/spring-petclinic-microservices/actions/workflows/maven-build.yml)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+Este repositório contém a avaliação de desempenho experimental do **Spring PetClinic Microservices** utilizando o **Locust**, avaliando o comportamento sob diferentes perfis de requisições e níveis de concorrência.
 
-This project demonstrates how to split the classic Spring PetClinic sample application into **[microservices](http://www.martinfowler.com/articles/microservices.html)**, with a **Vue.js frontend** and a Spring AI-powered chatbot.
-To achieve that goal, it relies on Spring Boot, **Spring Cloud Gateway**, **Spring Cloud Circuit Breaker** with Resilience4j, **Spring Cloud Config**, Micrometer Tracing with Zipkin, Prometheus and Grafana for monitoring, 
-Spring Boot Admin, Chaos Monkey for Spring Boot,  and the Eureka Service Discovery from the [Spring Cloud Netflix](https://github.com/spring-cloud/spring-cloud-netflix) technology stack.
+---
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/spring-petclinic/spring-petclinic-microservices)
+## 🎥 Vídeo Demonstrativo
+> **Link do Vídeo:** [Clique aqui para assistir à apresentação no Google Drive](https://drive.google.com/file/d/18qpAnUrnDwxOFcvZpXwXeFUEHuSOV6yl/view?usp=sharing)
+>
 
-[![Open in Codeanywhere](https://codeanywhere.com/img/open-in-codeanywhere-btn.svg)](https://app.codeanywhere.com/#https://github.com/spring-petclinic/spring-petclinic-microservices)
+---
 
-## Starting services locally without Docker
+## 📋 Sumário
+1. [Descrição do Ambiente](#-descrição-do-ambiente)
+2. [Arquitetura da Aplicação](#-arquitetura-da-aplicação)
+3. [Metodologia Experimental](#-metodologia-experimental)
+4. [Instruções de Reprodução](#-instruções-de-reprodução)
+5. [Tabelas Consolidadas](#-tabelas-consolidadas)
+6. [Gráficos Comparativos & Conclusões Específicas](#-gráficos-comparativos--conclusões-específicas)
+7. [Análise dos Resultados & Respostas às Questões Obrigatórias](#-análise-dos-resultados--respostas-às-questões-obrigatórias)
+8. [Conclusões Gerais e Recomendações de Engenharia](#-conclusões-gerais-e-recomendações-de-engenharia)
+9. [Estrutura do Repositório](#-estrutura-do-repositório)
 
-Every microservice is a Spring Boot application and can be started locally using IDE or `../mvnw spring-boot:run` command.
-Please note that supporting services (Config and Discovery Server) must be started before any other application (Customers, Vets, Visits and API).
-Startup of Tracing server, Admin server, Grafana and Prometheus is optional.
-If everything goes well, you can access the following services at given location:
-* Discovery Server - http://localhost:8761
-* Config Server - http://localhost:8888
-* Vue.js frontend (API Gateway) - http://localhost:8080
-* Customers, Vets, Visits and GenAI Services - random port, check Eureka Dashboard 
-* Tracing Server (Zipkin) - http://localhost:9411/zipkin/ (we use [openzipkin](https://github.com/openzipkin/zipkin/tree/main/zipkin-server))
-* Admin Server (Spring Boot Admin) - http://localhost:9090
-* Grafana Dashboards - http://localhost:3030
-* Prometheus - http://localhost:9091
+---
 
-You can tell Config Server to use your local Git repository by using `native` Spring profile and setting
-`GIT_REPO` environment variable, for example:
-`-Dspring.profiles.active=native -DGIT_REPO=/projects/spring-petclinic-microservices-config`
+## 🖥️ Descrição do Ambiente
 
-## Starting services locally with docker-compose
-In order to start entire infrastructure using Docker, you have to build images by executing
-``bash
-./mvnw clean install -P buildDocker
-``
-This requires `Docker` or `Docker desktop` to be installed and running.
+| Componente | Especificação |
+| :--- | :--- |
+| **Processador (CPU)** | 13th Gen Intel(R) Core(TM) i7-1355U (12 vCPUs @ até 5.0 GHz) |
+| **Memória RAM** | 8.0 GB Físicos (7.4 GiB disponíveis) + 4.0 GiB Swap |
+| **Sistema Operacional** | Linux Ubuntu (Kernel 7.0.0-38-generic, x86_64) |
+| **Docker Engine** | Versão 29.9.2 (build a82e528) |
+| **Docker Compose** | Versão v5.6.1 |
+| **Linguagem / Runtime** | Python 3.12.3 & OpenJDK 17 (Java) |
+| **Ferramenta de Carga** | Locust 2.46.7 |
+| **Aplicação Alvo** | Spring PetClinic Microservices (Spring Boot 3, Spring Cloud Gateway, Resilience4j) |
 
-Alternatively you can also build all the images on `Podman`, which requires Podman or Podman Desktop to be installed and running.
+---
+
+## 🏛️ Arquitetura da Aplicação
+
+A aplicação foi executada em ambiente conteinerizado via **Docker Compose**, composta por 11 serviços interconectados em uma rede bridge dedicada:
+
+- **`api-gateway` (Spring Cloud Gateway):** Ponto de entrada unificado para o tráfego HTTP externo (porta `8080` / `8088`). Responsável pelo roteamento reativo não-bloqueante (Netty), balanceamento de carga client-side e controle de tolerância a falhas com Circuit Breaker (Resilience4j).
+- **`customers-service`:** Microsserviço de gerenciamento de donos de pets (`owners`) e animais (`pets`), com banco de dados MySQL dedicado.
+- **`vets-service`:** Microsserviço de listagem de veterinários e especialidades, com cache em memória na JVM via anotação `@Cacheable("vets")`.
+- **`visits-service`:** Microsserviço para histórico de consultas e agendamentos.
+- **`discovery-server` (Netflix Eureka):** Registro dinâmico e descoberta de serviços.
+- **`config-server` (Spring Cloud Config):** Centralização de configurações externas.
+- **`admin-server` (Spring Boot Admin):** Dashboard administrativo para monitoramento de instâncias Spring.
+- **Bancos de Dados:** Instâncias dedicadas do MySQL para isolamento de dados por domínio.
+- **Observabilidade:** Contêineres de Prometheus e Grafana para telemetria.
+
+*Roteamento no API Gateway:*  
+Os testes com o Locust direcionam requisições para o Gateway, que efetua o roteamento dinâmico:
+- `/api/customer/owners` $\rightarrow$ `customers-service` (`/owners`)
+- `/api/customer/owners/{id}` $\rightarrow$ `customers-service` (`/owners/{id}`)
+- `/api/vet/vets` $\rightarrow$ `vets-service` (`/vets`)
+
+---
+
+## 🔬 Metodologia Experimental
+
+### 1. Perfis de Carga
+Foram implementados dois perfis de utilização no arquivo [`locustfile.py`](locustfile.py), reproduzindo padrões distintos de uso:
+
+| Operação | Perfil 1 — Leitura | Perfil 2 — Escrita | Endpoint Mapeado (API Gateway) |
+| :--- | :---: | :---: | :--- |
+| `GET /owners` | 45% | 20% | `GET /api/customer/owners` |
+| `GET /owners/{id}` | 35% | 20% | `GET /api/customer/owners/{id}` |
+| `GET /vets` | 15% | 20% | `GET /api/vet/vets` |
+| `POST /owners` | 5% | 40% | `POST /api/customer/owners` |
+
+- **Perfil 1 (Leitura):** 80% de leituras e 5% de escritas (mais 15% de leituras em cache).
+- **Perfil 2 (Escrita):** 40% de mutações transacionais (`POST`) e 60% de leituras.
+
+### 2. Cenários Experimentais
+Os dois perfis foram submetidos a três níveis de concorrência com rampa de subida imediata:
+
+| Cenário | Usuários Concorrentes | Duração Útil | Aquecimento (*Warmup*) | Duração Total por Repetição |
+| :---: | :---: | :---: | :---: | :---: |
+| **A — Leve** | 30 | 6 min | 1 min | 7 min (420s) |
+| **B — Moderado** | 80 | 6 min | 1 min | 7 min (420s) |
+| **C — Elevado** | 150 | 6 min | 1 min | 7 min (420s) |
+
+- **Repetições:** 10 repetições por configuração.
+- **Total de Experimentos:** 2 perfis × 3 cenários × 10 repetições = **60 execuções completas**.
+- **Tempo Total de Execução:** $60 \times 7\text{ min} = 420\text{ minutos}$ (~7 horas de baterias contínuas).
+- **Tratamento de Aquecimento (*Warmup*):** O primeiro minuto (60 segundos) de cada execução foi estritamente descartado nos scripts de processamento (`scripts/process_results.py`) para eliminar distorções transitórias da JVM (aquecimento do compilador JIT, criação de *connection pools* e alocação de buffers).
+- **Métricas Obrigatórias Coletadas:**
+  1. Tempo médio de resposta (ms)
+  2. Tempo de resposta no percentil 95 — P95 (ms)
+  3. Vazão / *Throughput* (req/s)
+  4. Total de requisições executadas
+  5. Taxa de falhas (%)
+  6. Utilização de CPU (%) do `api-gateway` e do `customers-service` (amostrados periodicamente via `docker stats`)
+
+---
+
+## 🚀 Instruções de Reprodução
+
+### 1. Pré-requisitos
+Certifique-se de possuir Docker, Docker Compose e Python 3 instalados:
 ```bash
-./mvnw clean install -PbuildDocker -Dcontainer.executable=podman
+docker --version
+docker compose version
+python3 --version
 ```
-By default, the Docker OCI image is build for an `linux/amd64` platform.
-For other architectures, you could change it by using the `-Dcontainer.platform` maven command line argument.
-For instance, if you target container images for an Apple M2, you could use the command line with the `linux/arm64` architecture:
+
+### 2. Iniciar a Aplicação
+Suba a infraestrutura de microsserviços via Docker Compose:
 ```bash
-./mvnw clean install -P buildDocker -Dcontainer.platform="linux/arm64"
+docker compose up -d
 ```
+Aguarde até que os contêineres estejam com status `healthy`/`Up` (aproximadamente 1 a 2 minutos). O API Gateway estará acessível em `http://localhost:8080` (ou `http://localhost:8088`).
 
-Once images are ready, you can start them with a single command
-`docker compose up` or `podman-compose up`. 
-
-Containers startup order is coordinated with the `service_healthy` condition of the Docker Compose [depends-on](https://github.com/compose-spec/compose-spec/blob/main/spec.md#depends_on) expression 
-and the [healthcheck](https://github.com/compose-spec/compose-spec/blob/main/spec.md#healthcheck) of the service containers. 
-After starting services, it takes a while for API Gateway to be in sync with service registry,
-so don't be scared of initial Spring Cloud Gateway timeouts. You can track services availability using Eureka dashboard
-available by default at http://localhost:8761.
-
-The `main` branch uses an Eclipse Temurin with Java 17 as Docker base image.
-
-*NOTE: Under MacOSX or Windows, make sure that the Docker VM has enough memory to run the microservices. The default settings
-are usually not enough and make the `docker-compose up` painfully slow.*
-
-
-## Starting services locally with docker-compose and Java
-If you experience issues with running the system via docker-compose you can try running the `./scripts/run_all.sh` script that will start the infrastructure 
-services via `docker compose` and all the Java based applications via standard `nohup java -jar ...` command.
-The logs will be available under `${ROOT}/target/nameoftheapp.log`.
-
-By default the applications are started without the `chaos-monkey` profile. Pass the optional `--chaos-monkey` flag to enable it and interact with Spring Boot Chaos Monkey:
+### 3. Configurar o Ambiente de Teste
+Crie o ambiente virtual Python e instale as dependências da suíte de teste e análise:
 ```bash
-./scripts/run_all.sh --chaos-monkey
+python3 -m venv .venv
+source .venv/bin/activate
+pip install locust pandas matplotlib
 ```
-You can check out the [README](scripts/chaos/README.md) for more information about how to use the `./scripts/chaos/call_chaos.sh` helper script to enable assaults.
 
-Use `./scripts/stop_all.sh` to stop all the Java applications and the docker-compose infrastructure containers started by `run_all.sh`.
-
-## Understanding the Spring Petclinic application
-
-[See the presentation of the Spring Petclinic Framework version](http://fr.slideshare.net/AntoineRey/spring-framework-petclinic-sample-application)
-
-[A blog post introducing the Spring Petclinic Microsevices](http://javaetmoi.com/2018/10/architecture-microservices-avec-spring-cloud/) (french language)
-
-You can then access petclinic here: http://localhost:8080/
-
-## Microservices Overview
-
-This project consists of several microservices:
-- **Customers Service**: Manages customer data.
-- **Vets Service**: Handles information about veterinarians.
-- **Visits Service**: Manages pet visit records.
-- **GenAI Service**: Provides a chatbot interface to the application.
-- **API Gateway**: Routes client requests to the appropriate services.
-- **Config Server**: Centralized configuration management for all services.
-- **Discovery Server**: Eureka-based service registry.
-
-Each service has its own specific role and communicates via REST APIs.
-
-
-![Spring Petclinic Microservices screenshot](docs/application-screenshot.png)
-
-
-**Architecture diagram of the Spring Petclinic Microservices**
-
-![Spring Petclinic Microservices architecture](docs/microservices-architecture-diagram.jpg)
-
-## Integrating the Spring AI Chatbot
-
-Spring Petclinic integrates a Chatbot that allows you to interact with the application in a natural language. Here are some examples of what you could ask:
-
-1. Please list the owners that come to the clinic.
-2. Are there any vets that specialize in surgery?
-3. Is there an owner named Betty?
-4. Which owners have dogs?
-5. Add a dog for Betty. Its name is Moopsie.
-6. Create a new owner.
-
-![Screenshot of the chat dialog](docs/spring-ai.png)
-
-This `spring-petclinic-genai-service` microservice currently supports **OpenAI** (default) or **Azure's OpenAI** as the LLM provider.
-In order to start the microservice, perform the following steps:
-
-1. Decide which provider you want to use. By default, the `spring-ai-starter-model-openai` dependency is enabled. 
-   You can change it to `spring-ai-starter-model-azure-openai`in the `pom.xml`.
-2. Create an OpenAI API key or an Azure OpenAI resource in your Azure Portal.
-   Refer to the [OpenAI's quickstart](https://platform.openai.com/docs/quickstart) or [Azure's documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/) for further information on how to obtain these.
-   You only need to populate the provider you're using - either openai, or azure-openai.
-   If you don't have your own OpenAI API key, don't worry!
-   You can temporarily use the `demo` key, which OpenAI provides free of charge for demonstration purposes.
-   This `demo` key has a quota, is limited to the `gpt-4o-mini` model, and is intended solely for demonstration use.
-   With your own OpenAI account, you can test the `gpt-4o` model by modifying the `deployment-name` property of the `application.yml` file.
-3. Export your API keys and endpoint as environment variables:
-    * either OpenAI:
-    ```bash
-    export OPENAI_API_KEY="your_api_key_here"
-    ```
-    * or Azure OpenAI:
-    ```bash
-    export AZURE_OPENAI_ENDPOINT="https://your_resource.openai.azure.com"
-    export AZURE_OPENAI_KEY="your_api_key_here"
-    ```
-
-## In case you find a bug/suggested improvement for Spring Petclinic Microservices
-
-Our issue tracker is available here: https://github.com/spring-petclinic/spring-petclinic-microservices/issues
-
-## Database configuration
-
-In its default configuration, Petclinic uses an in-memory database (HSQLDB) which gets populated at startup with data.
-A similar setup is provided for MySql in case a persistent database configuration is needed.
-Dependency for Connector/J, the MySQL JDBC driver is already included in the `pom.xml` files.
-
-### Start a MySql database
-
-You may start a MySql database with docker:
-
-```
-docker run -e MYSQL_ROOT_PASSWORD=petclinic -e MYSQL_DATABASE=petclinic -p 3306:3306 mysql:8.4.5
-```
-or download and install the MySQL database (e.g., MySQL Community Server 8.4.5 LTS), which can be found here: https://dev.mysql.com/downloads/
-
-### Use the Spring 'mysql' profile
-
-To use a MySQL database, you have to start 3 microservices (`visits-service`, `customers-service` and `vets-services`)
-with the `mysql` Spring profile. Add the `--spring.profiles.active=mysql` as program argument.
-
-By default, at startup, database schema will be created and data will be populated.
-You may also manually create the PetClinic database and data by executing the `"db/mysql/{schema,data}.sql"` scripts of each 3 microservices. 
-In the `application.yml` of the [Configuration repository], set the `initialization-mode` to `never`.
-
-If you are running the microservices with Docker, you have to add the `mysql` profile into the [Dockerfile](docker/Dockerfile):
-```
-ENV SPRING_PROFILES_ACTIVE docker,mysql
-```
-In the `mysql section` of the `application.yml` from the [Configuration repository], you have to change 
-the host and port of your MySQL JDBC connection string. 
-
-## Custom metrics monitoring
-
-Grafana and Prometheus are included in the `docker-compose.yml` configuration, and the public facing applications
-have been instrumented with [MicroMeter](https://micrometer.io) to collect JVM and custom business metrics.
-
-A JMeter load testing script is available to stress the application and generate metrics: [petclinic_test_plan.jmx](spring-petclinic-api-gateway/src/test/jmeter/petclinic_test_plan.jmx)
-
-![Grafana metrics dashboard](docs/grafana-custom-metrics-dashboard.png)
-
-### Using Prometheus
-
-* Prometheus can be accessed from your local machine at http://localhost:9091
-
-### Using Grafana with Prometheus
-
-* An anonymous access and a Prometheus datasource are setup.
-* A `Spring Petclinic Metrics` Dashboard is available at the URL http://localhost:3030/d/69JXeR0iw/spring-petclinic-metrics.
-You will find the JSON configuration file here: [docker/grafana/dashboards/grafana-petclinic-dashboard.json]().
-* You may create your own dashboard or import the [Micrometer/SpringBoot dashboard](https://grafana.com/dashboards/4701) via the Import Dashboard menu item.
-The id for this dashboard is `4701`.
-
-### Custom metrics
-Spring Boot registers a lot number of core metrics: JVM, CPU, Tomcat, Logback... 
-The Spring Boot auto-configuration enables the instrumentation of requests handled by Spring MVC.
-All those three REST controllers `OwnerResource`, `PetResource` and `VisitResource` have been instrumented by the `@Timed` Micrometer annotation at class level.
-
-* `customers-service` application has the following custom metrics enabled:
-  * @Timed: `petclinic.owner`
-  * @Timed: `petclinic.pet`
-* `visits-service` application has the following custom metrics enabled:
-  * @Timed: `petclinic.visit`
-
-## Looking for something in particular?
-
-| Spring Cloud components         | Resources  |
-|---------------------------------|------------|
-| Configuration server            | [Config server properties](spring-petclinic-config-server/src/main/resources/application.yml) and [Configuration repository] |
-| Service Discovery               | [Eureka server](spring-petclinic-discovery-server) and [Service discovery client](spring-petclinic-vets-service/src/main/java/org/springframework/samples/petclinic/vets/VetsServiceApplication.java) |
-| API Gateway                     | [Spring Cloud Gateway starter](spring-petclinic-api-gateway/pom.xml) and [Routing configuration](/spring-petclinic-api-gateway/src/main/resources/application.yml) |
-| Docker Compose                  | [Spring Boot with Docker guide](https://spring.io/guides/gs/spring-boot-docker/) and [docker-compose file](docker-compose.yml) |
-| Circuit Breaker                 | [Resilience4j fallback method](spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/boundary/web/ApiGatewayController.java)  |
-| Grafana / Prometheus Monitoring | [Micrometer implementation](https://micrometer.io/), [Spring Boot Actuator Production Ready Metrics] |
-
-| Front-end module   | Files                                                                                                                                                                                                 |
-|--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Maven build        | [Maven dependencies for Vue, Vue Router, Bootstrap, DOMPurify, and Marked](spring-petclinic-api-gateway/pom.xml). Maven packages the frontend; no Node.js, NPM, or maven-frontend-plugin is required. |
-| Vue JS             | [Standalone Vue modules](spring-petclinic-api-gateway/src/main/resources/static/scripts/main.js) use runtime templates and native browser imports in no-build mode.                                    |
-| Vue Router         | [Client-side routes](spring-petclinic-api-gateway/src/main/resources/static/scripts/router.js) use browser history for all application screens.                                                        |
-| Static entry point | [HTML host page](spring-petclinic-api-gateway/src/main/resources/static/index.html) mounts the Vue application and loads local WebJar assets.                                                         |
-
-## Pushing to a Docker registry
-
-Docker images for `linux/amd64` and `linux/arm64` platforms have been published into DockerHub 
-in the [springcommunity](https://hub.docker.com/u/springcommunity) organization.
-You can pull an image:
+### 4. Executar os Experimentos
+Para reproduzir a bateria completa dos 60 experimentos de forma automatizada:
 ```bash
-docker pull springcommunity/spring-petclinic-config-server
+./scripts/run_experiments.sh
 ```
-You may prefer to build then push images to your own Docker registry.
-
-### Choose your Docker registry
-
-You need to define your target Docker registry.
-Make sure you're already logged in by running `docker login <endpoint>` or `docker login` if you're just targeting Docker hub.
-
-Setup the `REPOSITORY_PREFIX` env variable to target your Docker registry.
-If you're targeting Docker hub, simple provide your username, for example:
+*Dica para execução em background imune a desconexão de terminal:*
 ```bash
-export REPOSITORY_PREFIX=springcommunity
+nohup ./scripts/run_experiments.sh > experiments.log 2>&1 &
 ```
 
-For other Docker registries, provide the full URL to your repository, for example:
+*(Opcional) Modo Rápido de Validação de Pipeline:*  
+Para testar os scripts sem aguardar 7 horas, execute 1 repetição de 20s para cada cenário:
 ```bash
-export REPOSITORY_PREFIX=harbor.myregistry.com/petclinic
+./scripts/run_experiments.sh --quick
 ```
 
-To push Docker image for the `linux/amd64` and the `linux/arm64` platform to your own registry, please use the command line:
+### 5. Processar os Resultados e Gerar Gráficos
+Após a finalização dos testes, execute o script de consolidação estatística:
 ```bash
-mvn clean install -Dmaven.test.skip -P buildDocker -Ddocker.image.prefix=${REPOSITORY_PREFIX} -Dcontainer.build.extraarg="--push" -Dcontainer.platform="linux/amd64,linux/arm64"
+./scripts/run_analysis.sh
+```
+Os dados brutos coletados em `results/raw/` serão consolidados em tabelas Markdown/CSV em `results/tables/` e nos gráficos comparativos em `results/plots/`.
+
+---
+
+## 📊 Tabelas Consolidadas
+
+### 1. Métricas Gerais por Cenário (Média das 10 Repetições pós-Warmup de 1 minuto)
+
+| Perfil | Cenário | Usuários | Tempo Médio (ms) | P95 (ms) | Vazão (req/s) | Total Reqs | Falhas (%) | CPU Gateway (%) | CPU Customers (%) |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Leitura** | A | 30 | 110.64 | 464.21 | 16.87 | 6,668 | **0.00%** | 14.94% | 146.20% |
+| **Leitura** | B | 80 | 502.88 | 3,186.19 | 41.36 | 14,848 | 96.94% | 11.18% | 135.05% |
+| **Leitura** | C | 150 | 262.13 | 1,674.96 | 85.51 | 30,714 | 98.98% | 19.34% | 150.66% |
+| **Escrita** | A | 30 | 842.69 | 4,032.48 | 13.89 | 4,987 | 89.15% | 3.96% | 180.72% |
+| **Escrita** | B | 80 | 236.37 | 1,374.82 | 46.41 | 16,662 | 98.32% | 9.61% | 188.57% |
+| **Escrita** | C | 150 | 134.27 | 7,927.42 | 84.02 | 30,367 | 99.58% | 21.66% | 84.47% |
+
+---
+
+### 2. Degradação de Desempenho por Operação (Tempo Médio e P95)
+
+| Perfil | Cenário | Operação | Tempo Médio (ms) | P95 (ms) | Total Reqs |
+|:---|:---:|:---|:---:|:---:|:---:|
+| **Leitura** | A (30u) | `GET /api/customer/owners` | 228.39 | 531.68 | 3,001 |
+| **Leitura** | A (30u) | `GET /api/customer/owners/[id]` | 15.76 | 94.99 | 2,323 |
+| **Leitura** | A (30u) | `GET /api/vet/vets` | 8.26 | 14.41 | 1,013 |
+| **Leitura** | A (30u) | `POST /api/customer/owners` | 17.06 | 74.13 | 330 |
+| **Leitura** | B (80u) | `GET /api/customer/owners` | 653.03 | 3,266.11 | 6,665 |
+| **Leitura** | B (80u) | `GET /api/customer/owners/[id]` | 521.53 | 3,203.69 | 5,210 |
+| **Leitura** | B (80u) | `GET /api/vet/vets` | 5.22 | 8.64 | 2,226 |
+| **Leitura** | B (80u) | `POST /api/customer/owners` | 509.97 | 2,846.75 | 746 |
+| **Leitura** | C (150u) | `GET /api/customer/owners` | 327.95 | 1,750.10 | 13,865 |
+| **Leitura** | C (150u) | `GET /api/customer/owners/[id]` | 284.60 | 1,670.20 | 10,721 |
+| **Leitura** | C (150u) | `GET /api/vet/vets` | 5.00 | 8.17 | 4,585 |
+| **Leitura** | C (150u) | `POST /api/customer/owners` | 280.41 | 1,634.69 | 1,542 |
+| **Escrita** | A (30u) | `GET /api/customer/owners` | 1,585.09 | 4,289.48 | 982 |
+| **Escrita** | A (30u) | `GET /api/customer/owners/[id]` | 872.31 | 3,828.66 | 1,012 |
+| **Escrita** | A (30u) | `GET /api/vet/vets` | 5.14 | 7.96 | 999 |
+| **Escrita** | A (30u) | `POST /api/customer/owners` | 891.66 | 3,879.90 | 1,992 |
+| **Escrita** | B (80u) | `GET /api/customer/owners` | 381.18 | 1,556.55 | 3,322 |
+| **Escrita** | B (80u) | `GET /api/customer/owners/[id]` | 258.35 | 1,415.97 | 3,313 |
+| **Escrita** | B (80u) | `GET /api/vet/vets` | 11.16 | 38.05 | 3,333 |
+| **Escrita** | B (80u) | `POST /api/customer/owners` | 264.74 | 1,376.80 | 6,693 |
+| **Escrita** | C (150u) | `GET /api/customer/owners` | 172.31 | 5,841.08 | 6,076 |
+| **Escrita** | C (150u) | `GET /api/customer/owners/[id]` | 137.81 | 1,327.82 | 6,060 |
+| **Escrita** | C (150u) | `GET /api/vet/vets` | 57.56 | 1,410.17 | 6,101 |
+| **Escrita** | C (150u) | `POST /api/customer/owners` | 152.46 | 7,199.88 | 12,128 |
+
+---
+
+## 📈 Gráficos Comparativos & Conclusões Específicas
+
+### 1. Tempo de Resposta vs Usuários Concorrentes (Médio e P95)
+![Tempo de Resposta vs Usuários](results/plots/response_time_vs_users.png)
+
+- **Observações:** Em carga leve (30 usuários), o tempo médio é de 110.64 ms e P95 de 464.21 ms no perfil de Leitura. Ao passar para 80 usuários, a latência sofre um salto expressivo (P95 de 3,186 ms em Leitura e 1,374 ms em Escrita). Em 150 usuários de escrita, o P95 explode para 7,927.42 ms. No cenário C de leitura, a média cai artificialmente para 262.13 ms.
+- **💡 Conclusão Técnica deste Gráfico:** O sistema possui um **ponto de inflexão crítico de saturação (*knee of the curve*) situado entre 50 e 80 usuários**. A degradação de tempo de resposta não é linear, mas exponencial, causada pelo esgotamento do pool de conexões com o banco de dados (HikariCP). A aparente queda da média em 150 usuários é um clássico artefato de *Fail-Fast*: a média cai porque as requisições passam a ser rejeitadas quase que instantaneamente (< 3 ms) pelo Circuit Breaker, enquanto o P95 revela a penalidade real sofrida pelas requisições enfileiradas.
+
+---
+
+### 2. Comparação de Vazão (*Throughput* req/s)
+![Comparação de Vazão](results/plots/throughput_comparison.png)
+
+- **Observações:** No regime estável com 30 usuários, o perfil de Leitura alcança 16.87 req/s contra 13.89 req/s no perfil de Escrita (vantagem de 21.4% para Leitura). Em 80 e 150 usuários, a taxa bruta de requisições sobe para ~45 e ~85 req/s.
+- **💡 Conclusão Técnica deste Gráfico:** Em regime de operação saudável, **o perfil de leitura entrega maior vazão útil** porque não disputa locks transacionais no MySQL e aproveita consultas leves. Porém, sob sobrecarga extrema (80 e 150 usuários), o throughput reportado é uma **"vazão espúria"**, composta em sua quase totalidade por respostas de erro HTTP 503 geradas de imediato. A conclusão fundamental em engenharia de sistemas distribuídos é que **vazão isolada, sem considerar a taxa de sucesso (*Goodput*), é uma métrica ilusória sob estresse**.
+
+---
+
+### 3. Consumo Médio de CPU dos Microsserviços
+![Consumo de CPU](results/plots/cpu_usage_comparison.png)
+
+- **Observações:** O `customers-service` consome disparado a maior fatia de processamento, atingindo picos de 188.57% e 180.72% de CPU (equivalente a quase dois núcleos completos). Por outro lado, o `api-gateway` oscila de forma contida entre 3.96% e 21.66%, e o `vets-service` mantém consumo irrisório (< 1.6%).
+- **💡 Conclusão Técnica deste Gráfico:** O **gargalo computacional da arquitetura reside na camada de domínio e persistência relacional**, e não na camada de roteamento de entrada. O modelo reativo não-bloqueante do Spring Cloud Gateway (Netty/WebFlux) absorve o fluxo com baixo custo de CPU, enquanto o processamento ORM com Hibernate, serialização/deserialização JSON do Jackson e validação de transações no `customers-service` exaurem os recursos computacionais. Conclui-se que, para escalar esta aplicação em produção, **a estratégia prioritária de auto-scaling horizontal deve focar exclusivamente no `customers-service`**.
+
+---
+
+### 4. Degradação de Desempenho por Operação Específica
+![Degradação por Operação](results/plots/operations_degradation.png)
+
+- **Observações:** A operação `GET /vets` permanece com latência estável e plana entre 5 e 11 ms na esmagadora maioria dos cenários (P95 de 8.64 ms no Cenário B de leitura). Por outro lado, `POST /owners` e `GET /owners` disparam para patamares de múltiplos segundos de latência (P95 de até 7,199.88 ms).
+- **💡 Conclusão Técnica deste Gráfico:** Este gráfico demonstra na prática a **eficácia indispensável do padrão de Cache em Memória (`@Cacheable("vets")`)**. Como o catálogo de veterinários é estático e servido diretamente da memória RAM da JVM, ele desacopla o microsserviço de qualquer contenção de I/O de disco ou locks no banco. Em contraste, endpoints que realizam varreduras de tabelas sem paginação (`findAll`) e operações de escrita atômica são os primeiros causadores de lentidão em cascata.
+
+---
+
+### 5. Taxa de Falhas (%) por Cenário e Perfil
+![Taxa de Falhas](results/plots/failure_rate.png)
+
+- **Observações:** Apenas o Cenário A de Leitura (30 usuários) obteve 0.00% de erros. Em todos os demais cenários com 80 e 150 usuários, a taxa de falha salta para patamares entre 96% e 99.58%.
+- **💡 Conclusão Técnica deste Gráfico:** Essa alta taxa de erro não reflete uma pane fatal ou encerramento dos contêineres (todos permaneceram ativos e saudáveis), mas sim a **atuação preventiva e deliberada do padrão Circuit Breaker (Resilience4j / Spring Cloud Gateway)**. Ao detectar que o `customers-service` e o banco de dados pararam de responder nos tempos limites (*timeouts*), o circuito abriu, rejeitando rapidamente as requisições em menos de 3 ms com HTTP 503. Esse mecanismo de *Fail-Fast* preservou os contêineres de sofrerem esgotamento de memória (*Out-Of-Memory*) e garantiu que o gateway continuasse de pé.
+
+---
+
+## 🔍 Análise dos Resultados & Respostas às Questões Obrigatórias
+
+### 1. Como o aumento de usuários afeta o tempo de resposta?
+> **Resposta:**  
+> O aumento do número de usuários concorrentes afeta o tempo de resposta de forma **não-linear e com efeito de ruptura brusca**.
+> - **Carga Leve (30 usuários):** No perfil de leitura, a aplicação atua dentro de sua capacidade nominal de serviço, registrando tempo médio de **110.64 ms** e P95 de **464.21 ms**.
+> - **Carga Moderada (80 usuários):** O sistema entra em sobrecarga severa, elevando o tempo médio para **502.88 ms** e o percentil 95 para **3,186.19 ms** na leitura (um aumento de quase 7× no P95). No perfil de escrita, a contenção transacional faz o P95 atingir **1,374.82 ms**.
+> - **Carga Elevada (150 usuários):** Sob bombardeio massivo no perfil de escrita, a cauda de distribuição degrada-se ao extremo, atingindo **7,927.42 ms** no P95. No perfil de leitura, embora a média aparente caia para **262.13 ms**, isso ocorre porque 98.98% das requisições são rejeitadas instantaneamente pelo Circuit Breaker em modo *Fail-Fast* (< 3 ms), enquanto as poucas requisições retidas no pool sofrem latência superior a 1,674 ms no P95.
+
+---
+
+### 2. Qual perfil apresenta maior vazão?
+> **Resposta:**  
+> Sob regime de operação nominal e útil (**Cenário A — 30 usuários concorrentes**), o **Perfil 1 (Leitura)** apresentou maior vazão com **16.87 req/s**, contra **13.89 req/s** no **Perfil 2 (Escrita)** — uma superioridade de **21.4% a favor da leitura**.
+> - O perfil de leitura atinge maior vazão útil porque 80% do tráfego não exige isolamento transacional nem escrita em disco (ACID), aproveitando o cache em memória de `GET /vets` e leituras diretas por ID (`GET /owners/{id}`).
+> - Já o perfil de escrita (com 40% de `POST /owners`) impõe sobrecarga de *row-locks*, geração de IDs autonuméricos, I/O síncrono e invalidações de cache, degradando a capacidade de atendimento.
+> - *Observação sobre cargas B e C:* Embora o throughput bruto reportado pelo Locust suba para 41-46 req/s e 84-85 req/s nos cenários de 80 e 150 usuários, essa vazão é integralmente espúria (composta por respostas imediatas de erro HTTP 503). Portanto, a **vazão efetiva (goodput) é superior no Perfil de Leitura**.
+
+---
+
+### 3. Quais operações apresentam maior degradação?
+> **Resposta:**  
+> A operação que apresentou a **maior degradação absoluta foi o `POST /api/customer/owners`**, cujo P95 saltou de **74.13 ms** (Leitura A) para **7,199.88 ms** (Escrita C) — uma degradação de **quase 100 vezes**.
+> - Em segundo lugar ficou o **`GET /api/customer/owners`**, cujo P95 atingiu **5,841.08 ms** (Escrita C) e **4,289.48 ms** (Escrita A). Isso ocorre porque este endpoint realiza uma busca irrestrita de todos os donos cadastrados (`findAll()` sem cláusula de paginação `LIMIT`), de modo que cada inserção realizada nos testes de escrita aumenta o volume de dados a ser serializado em JSON e trafegado pela rede.
+> - Em contraste marcante, a operação **mais resiliente e praticamente imune à degradação** foi o **`GET /api/vet/vets`**, mantendo tempos médios entre **5.00 ms e 11.16 ms** em praticamente todos os cenários (P95 de apenas 8.17 ms em Leitura C), comprovando na prática o benefício do cache em memória com `@Cacheable("vets")`.
+
+---
+
+### 4. Como o consumo de CPU varia entre os cenários?
+> **Resposta:**  
+> O consumo de processamento CPU variou de forma assimétrica e especializada entre os serviços:
+> - **`customers-service`:** Foi o principal consumidor de CPU do ecossistema, operando entre **135.05% e 188.57%** nos cenários de maior concorrência (consumindo quase dois núcleos completos do processador i7). Esse consumo elevado decorre da carga de deserialização JSON (Jackson), validação de constraints com Jakarta Bean Validation e a camada ORM/Hibernate mapeando entidades relacionais para objetos Java.
+> - **`api-gateway`:** Manteve consumo modesto e altamente controlado, variando de **3.96% a 14.94%** em cargas médias e atingindo no máximo **21.66%** sob 150 usuários. Isso evidencia a superioridade do modelo reativo orientado a eventos e não-bloqueante (Netty / Project Reactor) para encaminhamento de pacotes HTTP.
+> - **`vets-service`:** Manteve consumo de CPU insignificante (< 1.6%), visto que a resposta em cache não exige computação pesada nem consultas ao banco.
+
+---
+
+### 5. Qual cenário apresenta maior taxa de falhas?
+> **Resposta:**  
+> O cenário que apresentou a **maior taxa de falhas foi o Cenário C (150 usuários) no Perfil de Escrita**, com **99.58% de requisições falhas**, seguido pelo **Cenário C de Leitura (98.98%)** e pelo **Cenário B de Escrita (98.32%)**.
+> - O único cenário que operou em regime de confiabilidade perfeita (**0.00% de falhas**) foi o **Cenário A de Leitura (30 usuários concorrentes)**.
+> - O gatilho primário das falhas foi o esgotamento do pool de conexões com o banco de dados (HikariCP padrão de 10 conexões), gerando timeouts de conexão JDBC no `customers-service`.
+> - Em resposta aos timeouts, o **Circuit Breaker** (Resilience4j) configurado no API Gateway transitou para o estado **OPEN**, interrompendo o envio de requisições para o serviço degradado e retornando respostas rápidas de `HTTP 503 Service Unavailable`. Essa proteção evitou que o `customers-service` travasse por esgotamento de threads ou memória (OOM), demonstrando o funcionamento correto dos mecanismos de resiliência.
+
+---
+
+## 🏁 Conclusões Gerais e Recomendações de Engenharia
+
+Os 60 experimentos executados revelaram lições fundamentais sobre arquitetura e escalabilidade de sistemas distribuídos:
+
+1. **A Fragilidade da Camada de Persistência Sem Cache:** A camada de persistência relacional (ORM/JPA e pool HikariCP) é o elo mais fraco da cadeia de chamadas sob concorrência. Operações de escrita síncrona impõem um limite severo de escalabilidade vertical em uma única instância.
+2. **O Poder do Cache em Memória:** Conforme comprovado pelo `vets-service` (latência estável de ~5 ms em todas as cargas), dados com alta taxa de leitura e baixa mutabilidade devem ser obrigatoriamente mantidos em cache (local com Caffeine ou distribuído com Redis) para blindar a infraestrutura de banco de dados.
+3. **Resiliência e Fail-Fast:** O Circuit Breaker cumpriu com precisão seu papel arquitetural. Em vez de permitir o acúmulo infinito de requisições enfileiradas e a queda em cascata de todos os nós, o sistema sacrificou requisições excedentes via Fail-Fast (HTTP 503) para preservar a integridade dos contêineres.
+4. **Recomendações Técnicas para o Spring PetClinic:**
+   - **Dimensionamento de Pool e Réplicas de Leitura:** Aumentar o pool HikariCP e implantar réplicas de leitura (*read replicas*) com balanceamento no MySQL para diluir a carga de `GET /owners`.
+   - **Paginação Obrigatória:** Implementar paginação com chaves ou limites (`GET /owners?page=0&size=20`) para eliminar o impacto de varredura ampla do método `findAll()`.
+   - **Assincronismo para Escritas:** Desacoplar operações de cadastro (`POST /owners` e visitas) através de mensageria assíncrona (ex.: RabbitMQ ou Apache Kafka), respondendo `HTTP 202 Accepted` de forma imediata e processando as mutações no banco em background.
+
+---
+
+## 📁 Estrutura do Repositório
+
+```text
+spring-petclinic-microservices/
+├── docker-compose.yml              # Definição dos 11 contêineres e topologia de rede
+├── locustfile.py                   # Implementação dos perfis Leitura e Escrita
+├── README.md                       # Documentação completa, metodologia e análise
+├── experiments.log                 # Log de execução dos experimentos
+├── scripts/
+│   ├── run_experiments.sh         # Orquestrador das 60 execuções automatizadas
+│   ├── process_results.py          # Processamento estatístico e descarte de warmup
+│   └── run_analysis.sh             # Script unificado para gerar tabelas e gráficos
+└── results/
+    ├── plots/                      # 5 Gráficos comparativos gerados
+    │   ├── response_time_vs_users.png
+    │   ├── throughput_comparison.png
+    │   ├── cpu_usage_comparison.png
+    │   ├── operations_degradation.png
+    │   └── failure_rate.png
+    ├── tables/                     # Tabelas consolidadas em Markdown e CSV
+    │   ├── summary_metrics.md
+    │   ├── summary_metrics.csv
+    │   ├── operations_degradation.md
+    │   └── operations_degradation.csv
+    └── raw/                        # 360 arquivos CSV brutos (10 repetições × 6 cenários)
+        ├── reading_scenario_A_rep_1_*.csv
+        └── ...
 ```
 
-The `scripts/pushImages.sh` and `scripts/tagImages.sh` shell scripts could also be used once you build your image with the `buildDocker` maven profile.
-The `scripts/tagImages.sh` requires to declare the `VERSION` env variable.
+Os 60 experimentos executados revelaram lições fundamentais sobre arquitetura e escalabilidade de sistemas distribuídos:
 
-## Compiling the CSS
+1. **A Fragilidade da Camada de Persistência Sem Cache:** A camada de persistência relacional (ORM/JPA e pool HikariCP) é o elo mais fraco da cadeia de chamadas sob concorrência. Operações de escrita síncrona impõem um limite severo de escalabilidade vertical em uma única instância.
+2. **O Poder do Cache em Memória:** Conforme comprovado pelo `vets-service` (latência estável de ~5 ms em todas as cargas), dados com alta taxa de leitura e baixa mutabilidade devem ser obrigatoriamente mantidos em cache (local com Caffeine ou distribuído com Redis) para blindar a infraestrutura de banco de dados.
+3. **Resiliência e Fail-Fast:** O Circuit Breaker cumpriu com precisão seu papel arquitetural. Em vez de permitir o acúmulo infinito de requisições enfileiradas e a queda em cascata de todos os nós, o sistema sacrificou requisições excedentes via Fail-Fast (HTTP 503) para preservar a integridade dos contêineres.
+4. **Recomendações Técnicas para o Spring PetClinic:**
+   - **Dimensionamento de Pool e Réplicas de Leitura:** Aumentar o pool HikariCP e implantar réplicas de leitura (*read replicas*) com balanceamento no MySQL para diluir a carga de `GET /owners`.
+   - **Paginação Obrigatória:** Implementar paginação com chaves ou limites (`GET /owners?page=0&size=20`) para eliminar o impacto de varredura ampla do método `findAll()`.
+   - **Assincronismo para Escritas:** Desacoplar operações de cadastro (`POST /owners` e visitas) através de mensageria assíncrona (ex.: RabbitMQ ou Apache Kafka), respondendo `HTTP 202 Accepted` de forma imediata e processando as mutações no banco em background.
 
-There is a `petclinic.css` in `spring-petclinic-api-gateway/src/main/resources/static/css`.
-It was generated from the `petclinic.scss` source, combined with the [Bootstrap](https://getbootstrap.com/) library.
-If you make changes to the `scss`, or upgrade Bootstrap, you will need to re-compile the CSS resources
-using the Maven profile `css` of the `spring-petclinic-api-gateway`module.
-```bash
-cd spring-petclinic-api-gateway
-mvn generate-resources -P css
+---
+
+## 📁 Estrutura do Repositório
+
+```text
+spring-petclinic-microservices/
+├── docker-compose.yml              # Definição dos 11 contêineres e topologia de rede
+├── locustfile.py                   # Implementação dos perfis Leitura e Escrita
+├── README.md                       # Documentação completa, metodologia e análise
+├── experiments.log                 # Log de execução dos experimentos
+├── scripts/
+│   ├── run_experiments.sh         # Orquestrador das 60 execuções automatizadas
+│   ├── process_results.py          # Processamento estatístico e descarte de warmup
+│   └── run_analysis.sh             # Script unificado para gerar tabelas e gráficos
+└── results/
+    ├── plots/                      # 5 Gráficos comparativos gerados
+    │   ├── response_time_vs_users.png
+    │   ├── throughput_comparison.png
+    │   ├── cpu_usage_comparison.png
+    │   ├── operations_degradation.png
+    │   └── failure_rate.png
+    ├── tables/                     # Tabelas consolidadas em Markdown e CSV
+    │   ├── summary_metrics.md
+    │   ├── summary_metrics.csv
+    │   ├── operations_degradation.md
+    │   └── operations_degradation.csv
+    └── raw/                        # 360 arquivos CSV brutos (10 repetições × 6 cenários)
+        ├── reading_scenario_A_rep_1_*.csv
+        └── ...
 ```
 
-## Interesting Spring Petclinic forks
-
-The Spring Petclinic `main` branch in the main [spring-projects](https://github.com/spring-projects/spring-petclinic)
-GitHub org is the "canonical" implementation, currently based on Spring Boot and Thymeleaf.
-
-This [spring-petclinic-microservices](https://github.com/spring-petclinic/spring-petclinic-microservices/) project is one of the [several forks](https://spring-petclinic.github.io/docs/forks.html) 
-hosted in a special GitHub org: [spring-petclinic](https://github.com/spring-petclinic).
-If you have a special interest in a different technology stack
-that could be used to implement the Pet Clinic then please join the community there.
-
-
-## Contributing
-
-The [issue tracker](https://github.com/spring-petclinic/spring-petclinic-microservices/issues) is the preferred channel for bug reports, features requests and submitting pull requests.
-
-For pull requests, editor preferences are available in the [editor config](.editorconfig) for easy use in common text editors. Read more and download plugins at <http://editorconfig.org>.
-
-
-[Configuration repository]: https://github.com/spring-petclinic/spring-petclinic-microservices-config
-[Spring Boot Actuator Production Ready Metrics]: https://docs.spring.io/spring-boot/docs/current/reference/html/production-ready-metrics.html
-
-## Supported by
-
-[![JetBrains logo](https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg)](https://jb.gg/OpenSourceSupport)

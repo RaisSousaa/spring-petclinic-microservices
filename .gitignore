@@ -21,3 +21,11 @@ target/
 generated/
 
 **/.DS_Store
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+experiments.log
+results/raw_failed_attempt/
+

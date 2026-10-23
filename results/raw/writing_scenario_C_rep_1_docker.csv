@@ -1,0 +1,21 @@
+timestamp,container,cpu_perc,mem_usage,mem_perc
+1792720179,api-gateway,13.23%,401.3MiB / 512MiB,78.39%
+1792720179,customers-service,297.82%,412MiB / 512MiB,80.47%
+1792720179,vets-service,0.15%,224MiB / 512MiB,43.74%
+1792720179,visits-service,0.16%,186.8MiB / 512MiB,36.48%
+1792720198,api-gateway,17.76%,401.5MiB / 512MiB,78.42%
+1792720198,customers-service,202.07%,411.2MiB / 512MiB,80.31%
+1792720198,vets-service,0.11%,224MiB / 512MiB,43.74%
+1792720198,visits-service,0.14%,187MiB / 512MiB,36.52%
+1792720211,api-gateway,25.10%,400.6MiB / 512MiB,78.25%
+1792720211,customers-service,167.43%,409.2MiB / 512MiB,79.91%
+1792720211,vets-service,0.34%,224.1MiB / 512MiB,43.77%
+1792720211,visits-service,0.57%,187.5MiB / 512MiB,36.62%
+1792720248,api-gateway,34.65%,386.2MiB / 512MiB,75.43%
+1792720248,customers-service,134.42%,406.7MiB / 512MiB,79.44%
+1792720248,vets-service,0.28%,215.6MiB / 512MiB,42.11%
+1792720248,visits-service,0.27%,181.6MiB / 512MiB,35.46%
+1792720595,api-gateway,0.33%,383.4MiB / 512MiB,74.88%
+1792720595,customers-service,0.33%,404.3MiB / 512MiB,78.97%
+1792720595,vets-service,0.24%,215.3MiB / 512MiB,42.05%
+1792720595,visits-service,0.28%,181.8MiB / 512MiB,35.51%

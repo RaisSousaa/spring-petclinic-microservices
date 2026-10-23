@@ -1,0 +1,34 @@
+[2026-10-22 21:09:36,482] rais/INFO/locust.main: Starting Locust 2.46.7
+[2026-10-22 21:09:36,484] rais/INFO/locust.main: Run time limit set to 420 seconds
+[2026-10-22 21:09:36,486] rais/INFO/locust.runners: Ramping to 30 users at a rate of 10.00 per second
+[2026-10-22 21:09:38,492] rais/INFO/locust.runners: All users spawned: {"WritingUser": 30} (30 total users)
+[2026-10-22 21:16:36,184] rais/INFO/locust.main: --run-time limit reached, shutting down
+[2026-10-22 21:16:36,212] rais/INFO/locust.main: Shutting down (exit code 1)
+Type     Name                                                                          # reqs      # fails |    Avg     Min     Max    Med |   req/s  failures/s
+--------|----------------------------------------------------------------------------|-------|-------------|-------|-------|-------|-------|--------|-----------
+GET      /api/customer/owners                                                            1135 1088(95.86%) |   1101       1   10007      4 |    2.71        2.59
+POST     /api/customer/owners                                                            2435 2274(93.39%) |    564       1   10008      4 |    5.80        5.42
+GET      /api/customer/owners/[id]                                                       1208 1107(91.64%) |    678       1   10009      4 |    2.88        2.64
+GET      /api/vet/vets                                                                   1216 1059(87.09%) |      4       1      25      4 |    2.90        2.52
+--------|----------------------------------------------------------------------------|-------|-------------|-------|-------|-------|-------|--------|-----------
+         Aggregated                                                                      5994 5528(92.23%) |    575       1   10009      4 |   14.29       13.18
+
+Response time percentiles (approximated)
+Type     Name                                                                                  50%    66%    75%    80%    90%    95%    98%    99%  99.9% 99.99%   100% # reqs
+--------|--------------------------------------------------------------------------------|--------|------|------|------|------|------|------|------|------|------|------|------
+GET      /api/customer/owners                                                                    4      5      6      6  10000  10000  10000  10000  10000  10000  10000   1135
+POST     /api/customer/owners                                                                    4      5      6      6      8  10000  10000  10000  10000  10000  10000   2435
+GET      /api/customer/owners/[id]                                                               4      5      6      6     34  10000  10000  10000  10000  10000  10000   1208
+GET      /api/vet/vets                                                                           4      5      6      6      6      7      9     10     21     26     26   1216
+--------|--------------------------------------------------------------------------------|--------|------|------|------|------|------|------|------|------|------|------|------
+         Aggregated                                                                              4      5      6      6      9  10000  10000  10000  10000  10000  10000   5994
+
+Error report
+# occurrences      Error                                                                                               
+------------------|---------------------------------------------------------------------------------------------------------------------------------------------
+2274               POST /api/customer/owners: HTTPError('503 Server Error: Service Unavailable for url: /api/customer/owners')
+1088               GET /api/customer/owners: HTTPError('405 Client Error: Method Not Allowed for url: /api/customer/owners')
+1107               GET /api/customer/owners/[id]: HTTPError('405 Client Error: Method Not Allowed for url: /api/customer/owners/[id]')
+1059               GET /api/vet/vets: HTTPError('405 Client Error: Method Not Allowed for url: /api/vet/vets')         
+------------------|---------------------------------------------------------------------------------------------------------------------------------------------
+

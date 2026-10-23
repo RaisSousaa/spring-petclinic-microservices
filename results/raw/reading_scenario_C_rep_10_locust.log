@@ -1,0 +1,34 @@
+[2026-10-22 20:19:46,968] rais/INFO/locust.main: Starting Locust 2.46.7
+[2026-10-22 20:19:46,969] rais/INFO/locust.main: Run time limit set to 420 seconds
+[2026-10-22 20:19:46,969] rais/INFO/locust.runners: Ramping to 150 users at a rate of 30.00 per second
+[2026-10-22 20:19:50,984] rais/INFO/locust.runners: All users spawned: {"ReadingUser": 150} (150 total users)
+[2026-10-22 20:26:46,675] rais/INFO/locust.main: --run-time limit reached, shutting down
+[2026-10-22 20:26:46,707] rais/INFO/locust.main: Shutting down (exit code 1)
+Type     Name                                                                          # reqs      # fails |    Avg     Min     Max    Med |   req/s  failures/s
+--------|----------------------------------------------------------------------------|-------|-------------|-------|-------|-------|-------|--------|-----------
+GET      /api/customer/owners                                                           16351 16316(99.79%) |    328       1   10034      4 |   38.96       38.88
+POST     /api/customer/owners                                                            1763 1750(99.26%) |    263       1   10029      4 |    4.20        4.17
+GET      /api/customer/owners/[id]                                                      12210 12136(99.39%) |    281       1   10030      4 |   29.09       28.92
+GET      /api/vet/vets                                                                   5318 5123(96.33%) |      4       1      41      4 |   12.67       12.21
+--------|----------------------------------------------------------------------------|-------|-------------|-------|-------|-------|-------|--------|-----------
+         Aggregated                                                                     35642 35325(99.11%) |    261       1   10034      4 |   84.92       84.17
+
+Response time percentiles (approximated)
+Type     Name                                                                                  50%    66%    75%    80%    90%    95%    98%    99%  99.9% 99.99%   100% # reqs
+--------|--------------------------------------------------------------------------------|--------|------|------|------|------|------|------|------|------|------|------|------
+GET      /api/customer/owners                                                                    4      5      6      6      7      9  10000  10000  10000  10000  10000  16351
+POST     /api/customer/owners                                                                    4      5      5      6      7      9  10000  10000  10000  10000  10000   1763
+GET      /api/customer/owners/[id]                                                               4      5      6      6      7      9  10000  10000  10000  10000  10000  12210
+GET      /api/vet/vets                                                                           4      5      6      6      7      8     10     14     34     41     41   5318
+--------|--------------------------------------------------------------------------------|--------|------|------|------|------|------|------|------|------|------|------|------
+         Aggregated                                                                              4      5      6      6      7      9  10000  10000  10000  10000  10000  35642
+
+Error report
+# occurrences      Error                                                                                               
+------------------|---------------------------------------------------------------------------------------------------------------------------------------------
+5123               GET /api/vet/vets: HTTPError('405 Client Error: Method Not Allowed for url: /api/vet/vets')         
+12136              GET /api/customer/owners/[id]: HTTPError('405 Client Error: Method Not Allowed for url: /api/customer/owners/[id]')
+16316              GET /api/customer/owners: HTTPError('405 Client Error: Method Not Allowed for url: /api/customer/owners')
+1750               POST /api/customer/owners: HTTPError('503 Server Error: Service Unavailable for url: /api/customer/owners')
+------------------|---------------------------------------------------------------------------------------------------------------------------------------------
+
